@@ -1,9 +1,13 @@
-- id: custom-secret-regex
-  name: Custom Secret Regex + Entropy
-  entry: python hooks/secret_scan.py
-  language: python
-  pass_filenames: true
-  files: '\.(py|java|js|ts|json|yaml|yml|env|properties|sh|tf|tpl)$'
-  description: |
-    Scan staged files for hardcoded secrets (passwords, tokens, API keys, private keys).
-    Uses regex patterns and entropy checks. Returns non-zero when a potential secret is found.
+repos:
+  - repo: local
+    hooks:
+      - id: detect-secrets-local
+        name: Detect Secrets (Local)
+        entry: bash -c "git diff --cached --name-only | xargs detect-secrets scan"
+        language: system
+        pass_filenames: false
+      - id: custom-secret-regex
+        name: Custom Secret Regex
+        entry: python .githooks/secret_scan.py
+        language: system
+        files: '\.(py|java|js|ts|json|yaml|yml|env|properties|sh)$'

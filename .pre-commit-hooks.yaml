@@ -1,13 +1,7 @@
-repos:
-  - repo: local
-    hooks:
-      - id: detect-secrets-local
-        name: Detect Secrets (Local)
-        entry: bash -c "git diff --cached --name-only | xargs detect-secrets scan"
-        language: system
-        pass_filenames: false
-      - id: custom-secret-regex
-        name: Custom Secret Regex
-        entry: python .githooks/secret_scan.py
-        language: system
-        files: '\.(py|java|js|ts|json|yaml|yml|env|properties|sh)$'
+- id: custom-secret-regex
+  name: Custom Secret Regex
+  entry: python hooks/secret_scan.py
+  language: system
+  description: Scan staged files for hardcoded secrets (passwords, tokens, UUIDs, etc.)
+  files: '\.(py|java|js|ts|json|yaml|yml|env|properties|sh)$'
+  stages: [commit]

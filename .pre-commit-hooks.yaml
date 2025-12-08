@@ -1,7 +1,6 @@
 - id: custom-secret-regex
   name: Custom Secret Regex
   entry: hooks/secret_scan.py
-  language: python
-  pass_filenames: false
+  language: script
   description: Scan staged files for hardcoded secrets (passwords, tokens, UUIDs, UUID-based secret IDs, etc.).
   files: '\.(py|java|js|ts|json|ya?ml|env|properties|sh)$'

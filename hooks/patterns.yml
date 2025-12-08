@@ -1,0 +1,14 @@
+regex_patterns:
+  - '(?i)(password|passwd|pwd)\s*[:=]\s*["\']?\S{4,}["\']?'
+  - '(?i)(api[_-]?key|apikey|token|secret)\s*[:=]\s*["\']?\S{8,}["\']?'
+  - 'AKIA[0-9A-Z]{16}'
+  - 'AIza[0-9A-Za-z\-_]{35}'
+  - 'xox[baprs]-[A-Za-z0-9-]{10,}'
+  - '-----BEGIN (RSA|PRIVATE|OPENSSH|DSA|EC) PRIVATE KEY-----'
+  - 'eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+'
+
+  # UUID near security keywords
+  - '(?i)(?:vault|secret|token|key|credential|clientid|client_id|secret_id)[A-Za-z0-9_\-]*\s*[:=]\s*["\']?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}["\']?'
+
+  # generic UUID (optional)
+  - '\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b'

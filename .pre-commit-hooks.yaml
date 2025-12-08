@@ -2,6 +2,6 @@
   name: Custom Secret Regex
   entry: python hooks/secret_scan.py
   language: system
-  description: Scan staged files for hardcoded secrets (passwords, tokens, UUIDs, etc.)
+  description: Scan staged files for hardcoded secrets (passwords, tokens, UUIDs, etc.).
   files: '\.(py|java|js|ts|json|yaml|yml|env|properties|sh)$'
   stages: [commit]

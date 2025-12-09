@@ -54,7 +54,7 @@ function Get-File($name) {
         try {
             Invoke-WebRequest -Uri $url -OutFile $destPath -UseBasicParsing -ErrorAction Stop
         } catch {
-            Write-Err "Failed to download $url: $_"
+            Write-Err "Failed to download ${url}: $_"
             throw
         }
     }

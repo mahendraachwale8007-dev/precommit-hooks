@@ -13,7 +13,7 @@ from pathlib import Path
 try:
     import yaml
 except Exception:
-    yaml = None  # we'll handle missing yaml gracefully
+    yaml = None  # handle missing PyYAML gracefully
 
 # -------------------------
 # Built-in default patterns
@@ -26,7 +26,7 @@ DEFAULT_PATTERNS = [
     r'xox[baprs]-[A-Za-z0-9-]{10,}',
     r'-----BEGIN (RSA|PRIVATE|OPENSSH|DSA|EC) PRIVATE KEY-----',
     r'eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+',
-    # smart uuid detection - lower priority fallback (kept in defaults too)
+    # smart uuid detection
     r'(?i)(?:vault|secret|token|key|credential|clientid|client_id|secret_id)[A-Za-z0-9_\-]*\s*[:=]\s*["\']?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}["\']?',
 ]
 
@@ -51,6 +51,19 @@ def load_patterns():
         print(f"[WARN] Failed to parse patterns file {PATTERNS_FILE}: {e}")
         return DEFAULT_PATTERNS
 
+def compile_patterns(patterns):
+    compiled = []
+    for p in patterns:
+        # If pattern already includes inline (?i) we'll still compile with MULTILINE,
+        # and keep case-sensitivity as per pattern. Use IGNORECASE only if pattern isn't explicitly case-sensitive.
+        try:
+            # compile with MULTILINE for per-line anchors; do not pass flags later
+            compiled.append(re.compile(p, flags=re.MULTILINE))
+        except re.error:
+            # fallback: compile without flags if compile fails
+            compiled.append(re.compile(p))
+    return compiled
+
 def get_staged_files():
     res = subprocess.run(
         ['git', 'diff', '--cached', '--name-only', '--diff-filter=ACM'],
@@ -67,16 +80,17 @@ def scan_file(path, compiled_patterns):
         return []
     findings = []
     for pat in compiled_patterns:
-        for m in re.finditer(pat, text, flags=re.MULTILINE):
+        # Use pat.finditer (compiled pattern) — do NOT pass flags here
+        for m in pat.finditer(text):
             line_no = text.count('\n', 0, m.start()) + 1
             lines = text.splitlines()
             snippet = lines[line_no - 1].strip() if 0 <= line_no - 1 < len(lines) else ''
-            findings.append((line_no, snippet, pat))
+            findings.append((line_no, snippet, pat.pattern))
     return findings
 
 def main():
     patterns = load_patterns()
-    compiled = [re.compile(p) for p in patterns]
+    compiled = compile_patterns(patterns)
 
     staged = get_staged_files()
     secrets_found = {}

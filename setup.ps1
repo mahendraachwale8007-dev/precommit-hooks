@@ -54,8 +54,6 @@ if (-not (Test-Path $githooks)) {
 
 # Helper: copy from local source or download
 function Get-File($name) {
-    param($name)
-
     $localPath = ""
     if ($SourceDir) {
         try {

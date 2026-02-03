@@ -1,95 +1,148 @@
 <#
 .SYNOPSIS
-  Bootstrap installer to apply centralized pre-commit hooks
-  across multiple local repositories.
+  Bootstrap installer to apply pre-commit setup across multiple repositories.
 
 .DESCRIPTION
-  Reads repos.yml and runs setup.ps1 for each listed repository.
-  This allows developers to secure all their repos with one command.
+  - Verifies REAL Python 3 installation (not Microsoft Store alias)
+  - Ensures PyYAML is available
+  - Parses repos.yml using Python
+  - Runs setup.ps1 for each configured repository
+  - Fails fast on any prerequisite issue
 #>
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-function Write-Ok($msg){ Write-Host "[OK] $msg" -ForegroundColor Green }
-function Write-Info($msg){ Write-Host "[INFO] $msg" -ForegroundColor Cyan }
-function Write-Warn($msg){ Write-Host "[WARN] $msg" -ForegroundColor Yellow }
-function Write-Err($msg){ Write-Host "[ERROR] $msg" -ForegroundColor Red }
+function Info($m) { Write-Host "[INFO]  $m" -ForegroundColor Cyan }
+function Ok($m)   { Write-Host "[OK]    $m" -ForegroundColor Green }
+function Err($m)  { Write-Host "[ERROR] $m" -ForegroundColor Red }
 
-# Resolve script root
-$RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ReposFile = Join-Path $RootDir "repos.yml"
-$SetupScript = Join-Path $RootDir "setup.ps1"
+$ROOT        = Split-Path -Parent $MyInvocation.MyCommand.Path
+$reposFile   = Join-Path $ROOT "repos.yml"
+$setupScript = Join-Path $ROOT "setup.ps1"
 
-# Validate files
-if (-not (Test-Path $ReposFile)) {
-    Write-Err "repos.yml not found in $RootDir"
-    exit 1
-}
+# ------------------------------------------------------------
+# 1️⃣ HARDENED Python detection (FAIL FAST)
+# ------------------------------------------------------------
 
-if (-not (Test-Path $SetupScript)) {
-    Write-Err "setup.ps1 not found in $RootDir"
-    exit 1
-}
+$pythonCmd = $null
+$pythonVersionOutput = ""
 
-# Check Python ONCE
 if (Get-Command py -ErrorAction SilentlyContinue) {
-    $pythonCmd = "py -3"
-} elseif (Get-Command python -ErrorAction SilentlyContinue) {
-    $pythonCmd = "python"
-} else {
-    Write-Err "Python 3.x not found. Please install Python and re-run."
+    try {
+        $pythonVersionOutput = & py -3 --version 2>&1
+        if ($LASTEXITCODE -eq 0 -and $pythonVersionOutput -match '^Python\s+\d+') {
+            $pythonCmd = "py -3"
+        }
+    } catch {}
+}
+
+if (-not $pythonCmd -and (Get-Command python -ErrorAction SilentlyContinue)) {
+    try {
+        $pythonVersionOutput = & python --version 2>&1
+        if ($LASTEXITCODE -eq 0 -and $pythonVersionOutput -match '^Python\s+\d+') {
+            $pythonCmd = "python"
+        }
+    } catch {}
+}
+
+if (-not $pythonCmd) {
+    Err "Python 3.x is required but not installed correctly."
+    Write-Host ""
+    Write-Host "What we checked:" -ForegroundColor Yellow
+    Write-Host " - python / py command exists ❌ (Microsoft Store alias detected)"
+    Write-Host " - Real Python runtime ❌"
+    Write-Host ""
+    Write-Host "Fix:" -ForegroundColor Yellow
+    Write-Host "1. Install Python from https://www.python.org/downloads/"
+    Write-Host "2. During install, CHECK 'Add Python to PATH'"
+    Write-Host "3. Disable Store alias:"
+    Write-Host "   Settings → Apps → Advanced app settings → App execution aliases"
+    Write-Host "   Turn OFF python.exe and python3.exe"
     exit 2
 }
 
-Write-Ok "Python detected"
+Ok "Python verified: $pythonCmd ($pythonVersionOutput)"
 
-# Install PyYAML if missing (for parsing repos.yml)
-try {
-    & $pythonCmd - << 'EOF'
-import yaml
-EOF
-} catch {
-    Write-Info "Installing PyYAML"
-    & $pythonCmd -m pip install --user pyyaml | Out-Null
+# ------------------------------------------------------------
+# 2️⃣ Validate required files
+# ------------------------------------------------------------
+
+if (-not (Test-Path $reposFile)) {
+    Err "repos.yml not found: $reposFile"
+    exit 3
 }
 
-# Load repos.yml
-$repos = & $pythonCmd - << 'EOF'
-import yaml, sys
-with open("repos.yml") as f:
-    data = yaml.safe_load(f)
-for r in data.get("repos", []):
-    print(f"{r['name']}|{r['path']}")
-EOF
+if (-not (Test-Path $setupScript)) {
+    Err "setup.ps1 not found in central repo"
+    exit 4
+}
 
-Write-Host ""
+# ------------------------------------------------------------
+# 3️⃣ Ensure PyYAML is available
+# ------------------------------------------------------------
 
-foreach ($line in $repos) {
-    $parts = $line.Split("|")
-    $name = $parts[0]
-    $path = $parts[1]
+& $pythonCmd -c "import yaml" 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Info "PyYAML not found. Installing..."
+    & $pythonCmd -m pip install --user pyyaml
+    Ok "PyYAML installed"
+} else {
+    Ok "PyYAML available"
+}
 
-    Write-Info "Processing repo: $name"
+# ------------------------------------------------------------
+# 4️⃣ Parse repos.yml using Python (SAFE)
+# ------------------------------------------------------------
 
-    if (-not (Test-Path $path)) {
-        Write-Warn "Path not found, skipping: $path"
-        continue
+$repoList = & $pythonCmd -c "
+import yaml
+with open(r'$reposFile','r') as f:
+    data = yaml.safe_load(f) or {}
+for r in data.get('repos', []):
+    p = r.get('path')
+    if p:
+        print(p)
+"
+
+# 🔒 NORMALIZE OUTPUT (critical fix)
+if ($repoList -is [string]) {
+    $repoList = @($repoList)
+}
+
+if (-not $repoList -or $repoList.Count -eq 0) {
+    Err "No repositories found in repos.yml"
+    exit 5
+}
+
+Ok "Found $($repoList.Count) repositories"
+
+# ------------------------------------------------------------
+# 5️⃣ Apply setup.ps1 to each repo
+# ------------------------------------------------------------
+
+foreach ($repo in $repoList) {
+
+    if (-not (Test-Path $repo)) {
+        Err "Repository path does not exist: $repo"
+        exit 6
     }
 
-    if (-not (Test-Path (Join-Path $path ".git"))) {
-        Write-Warn "Not a git repo, skipping: $path"
-        continue
-    }
+    Ok "Applying setup to: $repo"
 
     try {
-        & $SetupScript -TargetRepo $path
-        Write-Ok "Hooks installed for $name"
+        powershell -ExecutionPolicy Bypass `
+            -File $setupScript `
+            -TargetRepo $repo
     } catch {
-        Write-Warn "Failed for $name — continuing"
+        Err "Setup failed for $repo"
+        exit 7
     }
-
-    Write-Host ""
 }
 
-Write-Ok "Bootstrap completed for all repositories"
+# ------------------------------------------------------------
+# 6️⃣ Done
+# ------------------------------------------------------------
+
+Ok "Bootstrap completed successfully for all repositories"
+exit 0

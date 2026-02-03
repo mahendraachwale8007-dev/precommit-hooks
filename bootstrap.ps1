@@ -7,6 +7,7 @@
   - Ensures PyYAML is available
   - Parses repos.yml using Python
   - Runs setup.ps1 for each configured repository
+  - Adds local git excludes to avoid repo pollution
   - Fails fast on any prerequisite issue
 #>
 
@@ -49,16 +50,12 @@ if (-not $pythonCmd -and (Get-Command python -ErrorAction SilentlyContinue)) {
 if (-not $pythonCmd) {
     Err "Python 3.x is required but not installed correctly."
     Write-Host ""
-    Write-Host "What we checked:" -ForegroundColor Yellow
-    Write-Host " - python / py command exists ❌ (Microsoft Store alias detected)"
-    Write-Host " - Real Python runtime ❌"
-    Write-Host ""
     Write-Host "Fix:" -ForegroundColor Yellow
-    Write-Host "1. Install Python from https://www.python.org/downloads/"
-    Write-Host "2. During install, CHECK 'Add Python to PATH'"
-    Write-Host "3. Disable Store alias:"
-    Write-Host "   Settings → Apps → Advanced app settings → App execution aliases"
-    Write-Host "   Turn OFF python.exe and python3.exe"
+    Write-Host "  1. Install Python from https://www.python.org/downloads/"
+    Write-Host "  2. CHECK 'Add Python to PATH' during install"
+    Write-Host "  3. Disable Store alias:"
+    Write-Host "     Settings → Apps → Advanced app settings → App execution aliases"
+    Write-Host "     Turn OFF python.exe / python3.exe"
     exit 2
 }
 
@@ -105,7 +102,7 @@ for r in data.get('repos', []):
         print(p)
 "
 
-# 🔒 NORMALIZE OUTPUT (critical fix)
+# Normalize single-value output
 if ($repoList -is [string]) {
     $repoList = @($repoList)
 }
@@ -118,7 +115,7 @@ if (-not $repoList -or $repoList.Count -eq 0) {
 Ok "Found $($repoList.Count) repositories"
 
 # ------------------------------------------------------------
-# 5️⃣ Apply setup.ps1 to each repo
+# 5️⃣ Apply setup + git exclude hygiene
 # ------------------------------------------------------------
 
 foreach ($repo in $repoList) {
@@ -130,6 +127,7 @@ foreach ($repo in $repoList) {
 
     Ok "Applying setup to: $repo"
 
+    # --- Run per-repo installer ---
     try {
         powershell -ExecutionPolicy Bypass `
             -File $setupScript `
@@ -138,6 +136,28 @@ foreach ($repo in $repoList) {
         Err "Setup failed for $repo"
         exit 7
     }
+
+    # --- Enterprise hygiene: local git exclude ---
+    $excludeFile = Join-Path $repo ".git\info\exclude"
+
+    if (-not (Test-Path $excludeFile)) {
+        New-Item -ItemType File -Path $excludeFile -Force | Out-Null
+    }
+
+    $excludeContent = Get-Content $excludeFile -ErrorAction SilentlyContinue
+
+    $neededLines = @(
+        ".githooks/",
+        ".pre-commit-config.yaml"
+    )
+
+    foreach ($line in $neededLines) {
+        if ($excludeContent -notcontains $line) {
+            Add-Content -Path $excludeFile -Value $line
+        }
+    }
+
+    Ok "Local git excludes ensured for $repo"
 }
 
 # ------------------------------------------------------------

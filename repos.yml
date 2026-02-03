@@ -1,0 +1,9 @@
+repos:
+  - name: ins-rules-test-pre-commit-hook
+    path: C:\Projects\Rules\Hackathon\Test\ins-rules-test-pre-commit-hook
+
+  - name: pricing-engine
+    path: C:\Projects\Services\pricing-engine
+
+  - name: fraud-detection
+    path: D:\Work\fraud-detection
